@@ -8,7 +8,7 @@
 
 一个 H5 操作页面 + 后台管理端的 Web 应用系统，核心功能：
 
-- **H5 端**：用户在移动端浏览器中访问操作页面，与后端保持 WebSocket 长连接
+- **H5 端**：用户通过 uni-app 构建的移动端页面访问操作页，与后端保持 WebSocket 长连接
 - **管理端**：后台管理员实时查看各个操作页面的在线人数，同一账号只能在一处登录（互斥登录）
 - **实时性**：在线人数变化即时推送到管理端，无需手动刷新
 
@@ -21,14 +21,16 @@
 | 技术 | 版本 | 用途 |
 |------|------|------|
 | Vue 3 | 3.5+ | 前端框架，Composition API 写法 |
-| Vite | 6+ | 构建工具 |
+| Vite | 6+ | 管理端构建工具 |
 | Vue Router | 4.4+ | 路由管理 |
 | Pinia | 2.2+ | 状态管理 |
-| Vant 4 | 4.9+ | **H5 端**移动端 UI 组件库 |
+| **uni-app** | 3.x (Vue3版) | **H5 端**跨端开发框架，支持 H5 + 小程序 + App |
+| **uview-plus** | 3.x | **H5 端** uni-app 生态 UI 组件库，Vue3 版 |
 | Element Plus | 2.9+ | **管理端**桌面端 UI 组件库 |
 | ECharts | 5.5+ | 管理端图表（在线人数趋势等） |
 | Axios | 1.7+ | HTTP 请求 |
 | 原生 WebSocket | — | 实时通信，浏览器原生 API，无需额外依赖 |
+| HBuilderX | 最新版 | uni-app 官方 IDE（开发 H5 端，也可用 CLI） |
 
 ### 2.2 后端
 
@@ -68,9 +70,9 @@
 ```
 ┌─────────────────────────────────────────────────┐
 │                    客户端                         │
-│  ┌──────────────┐      ┌──────────────────────┐ │
-│  │  H5 端 (Vue3  │      │  管理端 (Vue3        │ │
-│  │  + Vant4)    │      │  + Element Plus)     │ │
+│  ┌──────────────────┐      ┌──────────────────────┐ │
+│  │  H5 端 (uni-app   │      │  管理端 (Vue3        │ │
+│  │  + uview-plus)   │      │  + Element Plus)     │ │
 │  └──────┬───────┘      └──────────┬───────────┘ │
 │         │ WebSocket                │ WebSocket   │
 │         │ + HTTP                   │ + HTTP      │
@@ -174,20 +176,25 @@ project/
 │           ├── request.ts           # Axios 封装（拦截器、Token）
 │           └── websocket.ts         # WebSocket 封装（重连、心跳）
 │
-├── frontend-h5/                     # H5 端（Vue 3 + Vant 4）
+├── frontend-h5/                     # H5 端（uni-app + Vue 3 + uview-plus）
 │   ├── package.json
 │   ├── vite.config.ts
+│   ├── pages.json                   # uni-app 页面路由配置
+│   ├── manifest.json                # uni-app 应用配置
+│   ├── uni.scss                     # uni-app 全局样式变量
+│   ├── App.vue                      # 应用入口
+│   ├── main.ts                      # 主入口
 │   ├── index.html
-│   └── src/
-│       ├── main.ts
-│       ├── App.vue
-│       ├── router/
-│       │   └── index.ts
-│       ├── views/
-│       │   └── OperationPage.vue    # 操作页面
-│       └── utils/
-│           ├── request.ts           # Axios 封装
-│           └── websocket.ts         # WebSocket 封装（心跳、重连）
+│   ├── pages/                       # 页面目录（uni-app 规范）
+│   │   └── operation/
+│   │       └── index.vue            # 操作页面
+│   ├── components/                  # 公共组件
+│   ├── stores/                      # Pinia 状态管理
+│   │   └── user.ts
+│   ├── utils/
+│   │   ├── request.ts               # Axios 封装（uni.request 适配）
+│   │   └── websocket.ts             # WebSocket 封装（心跳、重连）
+│   └── static/                      # 静态资源
 │
 ├── nginx/
 │   └── nginx.conf                   # Nginx 配置
@@ -313,22 +320,26 @@ pymysql==1.1.*
 }
 ```
 
-### 6.3 H5 端 `package.json`
+### 6.3 H5 端 `package.json`（uni-app + uview-plus）
 
 ```json
 {
   "dependencies": {
     "vue": "^3.5",
-    "vue-router": "^4.4",
     "pinia": "^2.2",
-    "vant": "^4.9",
+    "uview-plus": "^3.5",
     "axios": "^1.7"
   },
   "devDependencies": {
-    "vite": "^6.0",
-    "@vitejs/plugin-vue": "^5.2",
-    "unplugin-vue-components": "^0.27",
-    "@vant/auto-import-resolver": "^1.2"
+    "@dcloudio/types": "^3.4",
+    "@dcloudio/uni-app": "3.x",
+    "@dcloudio/uni-app-plus": "3.x",
+    "@dcloudio/uni-components": "3.x",
+    "@dcloudio/uni-h5": "3.x",
+    "@dcloudio/uni-mp-weixin": "3.x",
+    "@dcloudio/vite-plugin-uni": "^3.0",
+    "sass": "^1.80",
+    "vite": "^6.0"
   }
 }
 ```
@@ -353,7 +364,7 @@ server {
         try_files $uri $uri/ /admin/index.html;
     }
 
-    # H5 端静态资源
+    # H5 端静态资源（uni-app H5 构建产物）
     location /h5 {
         alias /var/www/h5;
         try_files $uri $uri/ /h5/index.html;
@@ -423,7 +434,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
       - ./frontend-admin/dist:/var/www/admin
-      - ./frontend-h5/dist:/var/www/h5
+      - ./frontend-h5/dist/build/h5:/var/www/h5
       - ./ssl:/etc/ssl
     depends_on:
       - backend
@@ -457,9 +468,13 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 cd frontend-admin
 npm install && npm run dev
 
-# 前端 H5 端
+# 前端 H5 端（uni-app）
 cd frontend-h5
-npm install && npm run dev
+npm install
+# 开发模式（H5 浏览器预览）
+npm run dev:h5
+# 生产构建（H5）
+npm run build:h5
 
 # Docker 一键部署
 docker compose up -d
@@ -556,14 +571,14 @@ export async function initWebSocket(userId: string) {
 将此文档作为 AI 开发会话的上下文输入，配合以下提示词模板使用：
 
 > 我正在开发一个项目，请先阅读项目技术蓝图 `/workspace/project-blueprint.md`，然后帮我实现 [具体功能]。
-> 技术栈：Python FastAPI + Vue 3 + MySQL + Redis
+> 技术栈：Python FastAPI + Vue 3 + uni-app + MySQL + Redis
 > 请遵循文档中的技术选型、目录结构和代码规范。
 
 也可以按模块拆分开发：
 
 - **初始化项目脚手架**：后端 FastAPI 项目结构 + 前端 Vue 项目结构
 - **用户认证模块**：登录/注册 API + JWT + 管理端登录页
-- **H5 操作页面**：Vant 4 页面 + WebSocket 心跳
+- **H5 操作页面**：uni-app 页面 + uview-plus 组件 + WebSocket 心跳
 - **管理端仪表盘**：Element Plus 布局 + 在线人数实时面板
 - **互斥登录**：Redis 会话管理 + 被踢下线通知
 - **部署配置**：Nginx + Docker Compose + 环境变量
