@@ -10,6 +10,7 @@
 
 - **H5 端**：用户通过 uni-app 构建的移动端页面访问操作页，与后端保持 WebSocket 长连接
 - **管理端**：后台管理员实时查看各个操作页面的在线人数，同一账号只能在一处登录（互斥登录）
+- **账号隔离**：管理端账号与 H5 端账号完全分离，H5 用户无法登录管理端，反之亦然
 - **实时性**：在线人数变化即时推送到管理端，无需手动刷新
 
 ---
@@ -45,13 +46,13 @@
 | Alembic | 1.14+ | 数据库迁移，版本化管理表结构 |
 | redis-py（异步） | 5+ | Redis 客户端，在线状态、会话、Pub/Sub |
 | Pydantic | 2+ | 数据校验，FastAPI 内置 |
-| python-dotenv | 1+ | 环境变量管理 |
+| pydantic-settings | 2+ | 环境变量与配置管理（替代 python-dotenv） |
 
 ### 2.3 数据库与缓存
 
 | 技术 | 用途 | 存储内容 |
 |------|------|---------|
-| MySQL 8.0 | 关系型数据库 | 用户表、操作日志、业务数据 |
+| MySQL 8.0 | 关系型数据库 | 用户表（含 role 字段区分 admin/h5）、操作日志、业务数据 |
 | Redis 7 | 内存缓存 | 在线用户心跳、管理端会话、互斥登录状态 |
 
 ### 2.4 部署
@@ -102,7 +103,7 @@
               │
 ┌─────────────▼───────────┐
 │        MySQL 8.0        │
-│  - 用户表               │
+│  - 用户表（含 role 字段）  │
 │  - 业务数据表           │
 │  - 操作日志表           │
 └─────────────────────────┘
@@ -124,7 +125,9 @@ project/
 │   │   │   ├── __init__.py
 │   │   │   ├── v1/                  # HTTP REST API
 │   │   │   │   ├── __init__.py
-│   │   │   │   ├── auth.py          # 登录、登出、Token 刷新
+│   │   │   │   ├── auth.py          # 登录、登出、Token 刷新（admin/h5 共用逻辑）
+│   │   │   │   ├── admin_auth.py    # 管理端登录端点（POST /auth/admin/login）
+│   │   │   │   ├── h5_auth.py       # H5 端登录端点（POST /auth/h5/login）
 │   │   │   │   └── users.py         # 用户 CRUD
 │   │   │   └── ws/                  # WebSocket 端点
 │   │   │       ├── __init__.py
@@ -148,6 +151,9 @@ project/
 │   │   │   ├── auth_service.py
 │   │   │   ├── online_service.py   # 在线人数统计逻辑
 │   │   │   └── user_service.py
+│   │   ├── tasks/                   # 后台定时任务
+│   │   │   ├── __init__.py
+│   │   │   └── cleanup.py          # 定时清理过期心跳（30s 扫描，60s 超时剔除）
 │   │   └── utils/                   # 工具函数
 │   │       ├── __init__.py
 │   │       └── redis.py            # Redis 连接管理
@@ -239,24 +245,31 @@ Key: online_users:{page_id}    → Hash
 
 ### 5.2 互斥登录（同一账号只能一处登录）
 
+**适用范围**：管理端和 H5 端均适用，同一账号在两端的登录互斥独立管理。
+
 **流程**：
 
 ```
-管理端 A 登录 ──► Redis 记录: admin_sessions → {username: ws_id_A}
+用户 A 登录 ──► Redis 记录: sessions:{user_type} → {username: ws_id_A}
                                        │
-管理端 B 同账号登录 ──► 检测到已有 ws_id_A
+用户 B 同账号登录 ──► 检测到已有 ws_id_A
                      │
                      ├── Redis Pub/Sub 发踢人消息
                      ├── A 的 WebSocket 收到 kicked 通知
-                     ├── A 前端弹窗"被踢下线"并跳转登录页
+                     ├── A 前端弹窗"账号已在其他设备登录"并跳转登录页
                      └── Redis 更新: {username: ws_id_B}
 ```
 
 **Redis 数据结构**：
 
 ```
+# 管理端会话
 Key: admin_sessions            → Hash
   field: admin_zhangsan        → ws_id (当前有效连接标识)
+
+# H5 端会话
+Key: h5_sessions               → Hash
+  field: user_123              → ws_id (当前有效连接标识)
 ```
 
 ### 5.3 WebSocket 断线重连
@@ -273,12 +286,82 @@ Key: admin_sessions            → Hash
   连接成功后重置计数器
 ```
 
-### 5.4 JWT 鉴权
+### 5.4 JWT 鉴权与账号隔离
 
 - 登录成功返回 `access_token`（短期，如 30 分钟）和 `refresh_token`（长期，如 7 天）
+- JWT Payload 中包含 `role` 字段（`admin` 或 `h5`），用于后续请求的权限校验
 - HTTP 请求：`Authorization: Bearer <access_token>`
-- WebSocket 连接：在 URL 参数中传递 Token：`ws://host/ws/h5/user123?token=xxx`
-- 后端 WebSocket 连接建立时校验 Token，不合法则拒绝连接
+- **登录端点分离**：
+  - 管理端登录：`POST /api/v1/auth/admin/login` — 仅 `role=admin` 用户可登录，H5 用户被拒绝
+  - H5 端登录：`POST /api/v1/auth/h5/login` — 仅 `role=h5` 用户可登录，管理端用户被拒绝
+- WebSocket 连接：连接建立后，客户端首条消息发送 `{"type": "auth", "token": "xxx"}`，后端验证 Token 并校验 role 是否匹配当前 WS 端点（`/ws/admin` 仅接受 admin，`/ws/h5` 仅接受 h5）
+- 后端 WebSocket 连接建立后设置 10 秒认证超时，超时未收到有效 Token 则主动断开连接
+
+### 5.5 账号隔离设计
+
+**核心原则**：管理端（admin）和 H5 端（h5）是两套完全独立的账号体系，互不通用。
+
+**用户表设计**：
+
+```sql
+-- users 表核心字段
+id          BIGINT PRIMARY KEY AUTO_INCREMENT,
+username    VARCHAR(64)  NOT NULL UNIQUE,
+password    VARCHAR(256) NOT NULL,           -- bcrypt 哈希
+role        ENUM('admin', 'h5') NOT NULL,    -- 账号类型：admin=管理端，h5=H5端
+created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+```
+
+**登录校验流程**：
+
+```
+H5 用户登录                           后端
+  │                                    │
+  │── POST /api/v1/auth/h5/login ────►│
+  │                                    │── 查询用户 → role=h5 ✓
+  │◄─── 200 { access_token, ... } ────│
+
+H5 用户尝试登录管理端
+  │                                    │
+  │── POST /api/v1/auth/admin/login ─►│
+  │                                    │── 查询用户 → role=h5 ✗
+  │◄─── 403 "该账号无权登录管理端" ────│
+```
+
+**后端校验中间件**：
+
+```python
+# 登录接口校验（auth_service.py）
+async def login(username: str, password: str, required_role: str) -> dict:
+    user = await get_user_by_username(username)
+    if not user or not verify_password(password, user.password):
+        raise HTTPException(401, "用户名或密码错误")
+    if user.role != required_role:
+        raise HTTPException(403, f"该账号无权登录{'管理端' if required_role == 'admin' else 'H5端'}")
+    return create_tokens(user)  # JWT payload 中包含 role
+
+# WebSocket 校验（ws/ 端点通用）
+async def ws_auth(websocket, required_role: str) -> User:
+    msg = await asyncio.wait_for(websocket.receive_json(), timeout=10)
+    payload = verify_token(msg["token"])
+    if payload["role"] != required_role:
+        await websocket.close(4003, "无权访问此端点")
+        return None
+    return await get_user_by_id(payload["user_id"])
+```
+
+**各端 API 权限矩阵**：
+
+| API 端点 | 允许角色 | 说明 |
+|---------|---------|------|
+| `POST /api/v1/auth/admin/login` | `admin` | 管理端登录 |
+| `POST /api/v1/auth/h5/login` | `h5` | H5 端登录 |
+| `POST /api/v1/auth/refresh` | `admin`, `h5` | Token 刷新（通用） |
+| `WS /ws/admin` | `admin` | 管理端实时推送 |
+| `WS /ws/h5` | `h5` | H5 端心跳 |
+| `GET /api/v1/admin/*` | `admin` | 管理端业务 API |
+| `GET /api/v1/h5/*` | `h5` | H5 端业务 API |
 
 ---
 
@@ -295,7 +378,7 @@ alembic==1.14.*
 pyjwt==2.10.*
 passlib[bcrypt]==1.7.*
 pydantic==2.*
-python-dotenv==1.*
+pydantic-settings==2.*
 pymysql==1.1.*
 ```
 
@@ -351,12 +434,25 @@ pymysql==1.1.*
 ### 7.1 Nginx WebSocket 代理
 
 ```nginx
+# HTTP → HTTPS 重定向
 server {
-    listen 443 ssl http2;
+    listen 80;
+    server_name example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
     server_name example.com;
 
     ssl_certificate     /etc/ssl/cert.pem;
     ssl_certificate_key /etc/ssl/key.pem;
+
+    # 安全头
+    add_header Strict-Transport-Security "max-age=63072000" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
 
     # 管理端静态资源
     location /admin {
@@ -375,6 +471,8 @@ server {
         proxy_pass http://backend:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     # WebSocket 代理
@@ -383,6 +481,8 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_read_timeout 86400s;   # 24小时，避免空闲断开
         proxy_send_timeout 86400s;
     }
@@ -392,15 +492,16 @@ server {
 ### 7.2 Docker Compose
 
 ```yaml
-version: "3.8"
 services:
   backend:
     build: ./backend
     ports:
       - "8000:8000"
+    env_file:
+      - .env.docker                    # 从文件读取敏感信息，不硬编码
     environment:
-      - DATABASE_URL=mysql+pymysql://user:pass@mysql:3306/dbname
-      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
     depends_on:
       mysql:
         condition: service_healthy
@@ -409,9 +510,12 @@ services:
 
   mysql:
     image: mysql:8.0
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: dbname
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}        # 创建应用专用用户
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -421,8 +525,9 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 5s
       retries: 5
 
@@ -441,6 +546,17 @@ services:
 
 volumes:
   mysql_data:
+```
+
+配套 `.env.docker` 文件（不提交 Git）：
+
+```bash
+# .env.docker
+MYSQL_ROOT_PASSWORD=change_me_root_pass
+MYSQL_DATABASE=dbname
+MYSQL_USER=app_user
+MYSQL_PASSWORD=change_me_app_pass
+REDIS_PASSWORD=change_me_redis_pass
 ```
 
 ### 7.3 服务器参数
@@ -500,13 +616,12 @@ ENABLE_WEBSOCKET=true
 
 ```python
 # app/core/config.py
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    ENABLE_WEBSOCKET: bool = True  # 默认开启
+    model_config = SettingsConfigDict(env_file=".env")
 
-    class Config:
-        env_file = ".env"
+    ENABLE_WEBSOCKET: bool = True  # 默认开启
 
 settings = Settings()
 ```
