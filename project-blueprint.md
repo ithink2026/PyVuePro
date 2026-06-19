@@ -467,18 +467,87 @@ docker compose up -d
 
 ---
 
-## 9. 费用估算
+## 9. 长连接功能开关
 
-| 项目 | 方案 | 首年费用 |
-|------|------|---------|
-| 云服务器（2核2G） | 腾讯云/阿里云轻量 | ¥38（新用户） |
-| 域名 .cn | 腾讯云/阿里云 | ¥28-33（首年） |
-| Redis | 自建 Docker | ¥0 |
-| SSL 证书 | 免费（Let's Encrypt / 云厂商） | ¥0 |
-| MySQL | 自建 Docker | ¥0 |
-| **合计** | | **¥66-71/年** |
+系统支持通过配置开关来控制 WebSocket 长连接功能的启用/关闭，方便在不需要实时监控的场景下关闭该功能以节省服务器资源。
 
-续费约 ¥100-150/年。
+### 9.1 开关位置
+
+**后端 `.env` 文件**：
+
+```bash
+# .env
+# 长连接功能开关：true=启用，false=关闭
+ENABLE_WEBSOCKET=true
+```
+
+### 9.2 后端实现
+
+```python
+# app/core/config.py
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    ENABLE_WEBSOCKET: bool = True  # 默认开启
+
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+```
+
+```python
+# main.py
+from app.core.config import settings
+
+# 根据开关决定是否注册 WebSocket 路由
+if settings.ENABLE_WEBSOCKET:
+    from app.api.ws import h5, admin
+    app.include_router(h5.router)
+    app.include_router(admin.router)
+```
+
+```python
+# services/online_service.py —— 业务逻辑中也可根据开关跳过
+from app.core.config import settings
+
+async def record_heartbeat(user_id: str):
+    if not settings.ENABLE_WEBSOCKET:
+        return  # 长连接关闭时跳过心跳记录
+    await redis_client.hset(ONLINE_USERS_KEY, user_id, time.time())
+```
+
+### 9.3 前端适配
+
+前端通过后端 API 获取开关状态，决定是否建立 WebSocket 连接：
+
+```typescript
+// utils/api.ts —— 新增一个获取开关状态的接口
+// GET /api/v1/config/websocket-enabled → { "enabled": true }
+```
+
+```typescript
+// utils/websocket.ts
+import { getWebSocketConfig } from './api'
+
+export async function initWebSocket(userId: string) {
+  const { enabled } = await getWebSocketConfig()
+  if (!enabled) {
+    console.log('长连接功能已关闭，跳过 WebSocket 连接')
+    return
+  }
+  // 正常建立 WebSocket 连接...
+}
+```
+
+### 9.4 切换效果
+
+| 开关状态 | 后端行为 | 前端行为 |
+|---------|---------|---------|
+| `ENABLE_WEBSOCKET=true` | 注册 WebSocket 路由，记录心跳，推送在线人数 | 建立 WebSocket 连接，发送心跳 |
+| `ENABLE_WEBSOCKET=false` | 不注册 WebSocket 路由，跳过心跳记录 | 不建立 WebSocket 连接，页面正常使用 |
+
+修改 `.env` 后重启后端服务即可生效，无需改代码、无需重新部署。
 
 ---
 
