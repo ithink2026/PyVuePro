@@ -1,16 +1,5 @@
 <template>
   <div class="page">
-    <!-- 在线人数统计卡片 -->
-    <el-card shadow="hover" class="online-card">
-      <div class="online-wrap">
-        <div class="online-icon"><el-icon :size="40"><Monitor /></el-icon></div>
-        <div class="online-body">
-          <div class="online-label">在线人数</div>
-          <div class="online-num">{{ onlineCount }}</div>
-        </div>
-      </div>
-    </el-card>
-
     <el-card shadow="hover" class="search-card">
       <el-form :inline="true" :model="query" class="search-form">
         <el-form-item label="用户名">
@@ -60,20 +49,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { RefreshRight, Search, Refresh, Monitor } from '@element-plus/icons-vue'
+import { RefreshRight, Search, Refresh } from '@element-plus/icons-vue'
 import { h5UserApi } from '@/api/modules/h5User'
-import { useWebSocket } from '@/hooks/useWebSocket'
-import { useAuthStore } from '@/stores/auth'
 
 const list = ref<any[]>([])
 const query = ref({ username: '' })
 const loading = ref(false)
 const switchingId = ref(0)
-
-const authStore = useAuthStore()
-const { count: onlineCount, connect: wsConnect, disconnect: wsDisconnect } = useWebSocket()
 
 async function fetchList() {
   loading.value = true
@@ -109,47 +93,8 @@ async function handleResetPwd(row: any) {
 
 onMounted(() => {
   fetchList()
-  if (authStore.token) {
-    wsConnect(authStore.token)
-  }
-})
-
-onBeforeUnmount(() => {
-  wsDisconnect()
 })
 </script>
 
 <style lang="less" scoped>
-.online-card {
-  border-radius: 6px;
-  margin-bottom: 16px;
-  max-width: 360px;
-}
-.online-wrap {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 8px 0;
-}
-.online-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 6px;
-  background: #ecf5ff;
-  color: #409eff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.online-label {
-  font-size: 14px;
-  color: #909399;
-}
-.online-num {
-  font-size: 36px;
-  font-weight: 700;
-  color: #303133;
-  margin-top: 4px;
-}
 </style>

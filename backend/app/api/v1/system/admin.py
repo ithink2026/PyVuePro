@@ -108,21 +108,6 @@ async def get_h5_status(admin: dict = Depends(get_admin_info)):
     }
 
 
-@router.get("/online-config")
-async def get_online_config(admin: dict = Depends(get_admin_info)):
-    """获取首页在线H5用户数显示开关状态"""
-    return {"enabled": settings.SHOW_ONLINE_COUNT}
-
-
-@router.post("/online-config")
-async def toggle_online(data: dict, admin: dict = Depends(get_admin_info)):
-    """切换首页在线H5用户数显示开关"""
-    if not admin.get("is_super_admin"):
-        raise ForbiddenError("该功能仅超级管理员可操作")
-    settings.SHOW_ONLINE_COUNT = data.get("enabled", True)
-    return {"enabled": settings.SHOW_ONLINE_COUNT}
-
-
 @router.get("/h5-login-config")
 async def get_h5_login_config(admin: dict = Depends(get_admin_info)):
     """获取 H5 登录方式配置"""

@@ -1,11 +1,10 @@
-"""管理端 WebSocket 端点（实时推送在线人数）"""
+"""管理端 WebSocket 端点"""
 
 import asyncio
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.security import verify_token
-from app.services.online_service import get_online_count
 
 router = APIRouter()
 
@@ -29,13 +28,6 @@ async def admin_websocket(websocket: WebSocket):
 
         admin_connections.append(websocket)
 
-        # 发送当前在线人数
-        try:
-            count = await get_online_count()
-            await websocket.send_json({"type": "online_count", "count": count})
-        except Exception:
-            pass
-
         while True:
             data = await asyncio.wait_for(websocket.receive_json(), timeout=90)
             if data.get("type") == "ping":
@@ -50,27 +42,3 @@ async def admin_websocket(websocket: WebSocket):
     finally:
         if websocket in admin_connections:
             admin_connections.remove(websocket)
-
-
-async def broadcast_online_count():
-    """向所有管理端连接广播在线人数（有超时保护）"""
-    try:
-        count = await asyncio.wait_for(get_online_count(), timeout=5)
-    except Exception:
-        return  # Redis 不可用，跳过
-
-    disconnected = []
-    for ws in admin_connections:
-        try:
-            await asyncio.wait_for(
-                ws.send_json({"type": "online_count", "count": count}),
-                timeout=3,
-            )
-        except Exception:
-            disconnected.append(ws)
-
-    for ws in disconnected:
-        try:
-            admin_connections.remove(ws)
-        except ValueError:
-            pass

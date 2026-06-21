@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env")
 
     # 数据库
-    DATABASE_URL: str = "mysql+pymysql://root:root@localhost:3306/subsidy"
+    DATABASE_URL: str = "mysql+pymysql://root:root@localhost:3306/rbac_system"
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
@@ -26,9 +26,6 @@ class Settings(BaseSettings):
 
     # WebSocket 长连接开关
     ENABLE_WEBSOCKET: bool = True
-
-    # 首页是否显示在线H5用户数
-    SHOW_ONLINE_COUNT: bool = True
 
     # 心跳超时（秒）
     HEARTBEAT_TIMEOUT: int = 60

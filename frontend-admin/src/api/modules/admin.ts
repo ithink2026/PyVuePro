@@ -22,12 +22,6 @@ export const adminApi = {
   toggleH5(enabled: boolean) {
     return request.post('/api/v1/admin/h5-config', { enabled })
   },
-  getOnlineConfig() {
-    return request.get('/api/v1/admin/online-config')
-  },
-  toggleOnline(enabled: boolean) {
-    return request.post('/api/v1/admin/online-config', { enabled })
-  },
   getH5LoginConfig() {
     return request.get('/api/v1/admin/h5-login-config')
   },
