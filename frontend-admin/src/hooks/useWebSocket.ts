@@ -7,7 +7,7 @@ const MAX_RECONNECT_DELAY = 30000
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
 export function useWebSocket() {
-  const connected = ref(false)
+  const count = ref(0)
 
   function connect(token: string) {
     if (ws) {
@@ -23,18 +23,21 @@ export function useWebSocket() {
     ws = new WebSocket(url)
 
     ws.onopen = () => {
-      connected.value = true
       reconnectDelay = 1000
       ws!.send(JSON.stringify({ type: 'auth', token }))
       startHeartbeat()
     }
 
-    ws.onmessage = () => {
-      // 预留消息处理
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        if (data.type === 'online_count') {
+          count.value = data.count
+        }
+      } catch {}
     }
 
     ws.onclose = () => {
-      connected.value = false
       stopHeartbeat()
       scheduleReconnect(token)
     }
@@ -55,10 +58,9 @@ export function useWebSocket() {
       ws.close()
       ws = null
     }
-    connected.value = false
   }
 
-  return { connected, connect, disconnect }
+  return { count, connect, disconnect }
 }
 
 function startHeartbeat() {

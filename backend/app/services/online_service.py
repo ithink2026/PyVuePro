@@ -22,6 +22,12 @@ async def remove_user(user_id: str) -> None:
     await redis.hdel(ONLINE_USERS_KEY, user_id)
 
 
+async def get_online_count() -> int:
+    """获取当前在线人数"""
+    redis = get_redis()
+    return await redis.hlen(ONLINE_USERS_KEY)
+
+
 async def get_online_users() -> list[dict]:
     """获取所有在线用户及心跳时间"""
     redis = get_redis()
