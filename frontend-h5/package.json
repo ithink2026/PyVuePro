@@ -1,0 +1,28 @@
+{
+  "name": "frontend-h5",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:h5": "uni",
+    "build:h5": "uni build",
+    "dev:mp-weixin": "uni -p mp-weixin",
+    "build:mp-weixin": "uni build -p mp-weixin"
+  },
+  "dependencies": {
+    "pinia": "^2.2",
+    "uview-plus": "^3.5",
+    "vue": "^3.5"
+  },
+  "devDependencies": {
+    "@dcloudio/types": "^3.4",
+    "@dcloudio/uni-app": "3.0.0-alpha-5010320260611001",
+    "@dcloudio/uni-app-plus": "3.0.0-alpha-5010320260611001",
+    "@dcloudio/uni-components": "3.0.0-alpha-5010320260611001",
+    "@dcloudio/uni-h5": "3.0.0-alpha-5010320260611001",
+    "@dcloudio/uni-mp-weixin": "3.0.0-alpha-5010320260611001",
+    "@dcloudio/vite-plugin-uni": "3.0.0-alpha-5010320260611001",
+    "sass": "^1.80",
+    "vite": "5.2.8"
+  }
+}

@@ -1,0 +1,11 @@
+fastapi==0.115.*
+uvicorn[standard]==0.34.*
+redis[hiredis]==5.*
+sqlalchemy[asyncio]==2.0.*
+alembic==1.14.*
+pyjwt==2.10.*
+passlib[bcrypt]==1.7.*
+pydantic==2.*
+pydantic-settings==2.*
+pymysql==1.1.*
+aiomysql==0.2.*

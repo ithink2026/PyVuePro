@@ -1,0 +1,20 @@
+{
+  "name": "RBAC+WS",
+  "appid": "__UNI__XXXXXX",
+  "description": "",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "easycom": {
+    "autoscan": true,
+    "custom": {
+      "^u-(.*)": "uview-plus/components/u-$1/u-$1.vue"
+    }
+  },
+  "h5": {
+    "router": {
+      "mode": "hash",
+      "base": "/h5/"
+    }
+  }
+}

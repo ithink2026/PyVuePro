@@ -1,0 +1,79 @@
+/* 重置最外层 margin/padding */
+html, body, #app {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* 全局：操作按钮不换行 */
+.op-btns { display: inline-flex; gap: 4px; white-space: nowrap; }
+
+/* 全局：主按钮渐变 */
+.el-button--primary {
+  background: linear-gradient(135deg, #1b5e8a, #153e5c) !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(27,94,138,0.25);
+}
+.el-button--primary:hover {
+  opacity: 0.92;
+}
+.el-button--primary.is-loading,
+.el-button--primary:active {
+  opacity: 0.65;
+}
+
+/* 全局表头美化 */
+.el-table th.el-table__cell {
+  background: #ebf0f6 !important;
+  color: #303133 !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  white-space: nowrap !important;
+  border-bottom: 2px solid #d4deea !important;
+}
+.el-table .el-table__cell { padding: 10px 8px; }
+
+/* 页面通用样式 */
+.page { width: 100%; }
+.search-card { margin-bottom: 16px; border-radius: 6px; }
+.search-form { display: flex; align-items: center; flex-wrap: wrap; }
+.search-form .el-form-item { margin-bottom: 0; }
+.main-card { border-radius: 6px; }
+.card-header { display: flex; justify-content: flex-start; align-items: center; }
+.perm-box { max-height: 400px; overflow-y: auto; border: 1px solid #ebeef5; border-radius: 6px; padding: 8px; }
+
+/* ===== 滚动条美化 ===== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb {
+  background: #b0c4d8;
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #7a9ab8;
+}
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #b0c4d8 transparent;
+}
+
+/* 移除 el-dropdown 触发器的焦点黑框 */
+.el-dropdown .el-tooltip__trigger {
+  outline: none !important;
+  border: none !important;
+}
+
+/* 移除 el-header 默认边框 */
+.el-header {
+  border-bottom: none !important;
+  --el-header-border-bottom: none;
+}
